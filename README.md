@@ -1,5 +1,7 @@
 # Logcatter 🐱
 
+[See logcatter from PyPI](https://pypi.org/project/logcatter/)
+
 **Brings the familiar convenience and readability of Android's Logcat to your Python projects.**
 
 Tired of complex logger configurations? `Logcatter` lets you use intuitive methods like `Log.d()` and `Log.i()` right away. It automatically tags logs with the calling filename, dramatically speeding up your debugging workflow.
