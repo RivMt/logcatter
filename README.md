@@ -34,4 +34,14 @@ Log.f("FATAL ERROR", s=True)  # You can log the stacktrace with flag `s`
 
 ### 💻 Output Example
 
-Running the code above will produce this beautifully formatted output in your terminal:
+**Visual Studio Code**
+
+![visual-studio-code-output-example](/docs/images/vsc.png)
+
+**PyCharm**
+
+![pycharm-output-exmaple](/docs/images/pycharm.png)
+
+**PowerShell 7 on Windows Terminal**
+
+![pwsh7-wt-output-example](/docs/images/powershell.png)
