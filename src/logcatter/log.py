@@ -42,6 +42,7 @@ class Log:
         """
         logger = logging.getLogger(Logcat.NAME)
         if not logger.hasHandlers():
+            logger.setLevel(logging.DEBUG)
             handler = logging.StreamHandler()
             handler.setFormatter(LogFormatter())
             logger.addHandler(handler)
