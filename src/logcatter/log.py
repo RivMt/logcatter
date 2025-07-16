@@ -63,6 +63,15 @@ class Log:
         Log.getLogger().setLevel(level)
 
     @staticmethod
+    def isVerbose():
+        """
+        Checks the logging level is `Log.DEBUG`.
+        :return:
+            bool: `True` when the level is `Log.DEBUG`, `False` otherwise.
+        """
+        return Log.getLogger().level == Log.DEBUG
+
+    @staticmethod
     def d(msg: str, *args, **kwargs):
         """
         Logs a message with the DEBUG level.
