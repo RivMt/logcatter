@@ -8,25 +8,16 @@ resembling the output from Android's Logcat.
 import logging
 import time
 
+from logcatter.color import COLOR, COLOR_RESET
+
 
 class LogFormatter(logging.Formatter):
     """
     A custom log formatter that mimics the style of Android's Logcat.
 
     This formatter creates log messages with the following structure:
-    `YYYY-MM-DD HH:mm:ss.SSS [L/tag] message`
-
-    Attributes:
-        COLOR (dict): A mapping from logging levels to ANSI color codes.
+    `YYYY-MM-DD HH:mm:ss SSS [L/tag] message`
     """
-
-    COLOR = {
-        logging.DEBUG: '\x1b[37;20m',
-        logging.INFO: '\x1b[32;20m',
-        logging.WARNING: '\x1b[33;20m',
-        logging.ERROR: '\x1b[31;20m',
-        logging.CRITICAL: '\x1b[31;1m',
-    }
 
     def format(self, record: logging.LogRecord) -> str:
         """
@@ -46,10 +37,11 @@ class LogFormatter(logging.Formatter):
         level = record.levelname.upper()[0]
         tag = record.filename
         message = record.getMessage()
-        color = self.COLOR.get(record.levelno)
-        color_reset = self.COLOR.get(logging.DEBUG)
+        color = COLOR.get(record.levelno)
+        color_reset = COLOR_RESET
+        header = f"{asctime} [{level}/{tag}] "
         # Base message
-        result = f"{color}{asctime} [{level}/{tag}] {message}{color_reset}"
+        result = f"{color}{header}{message}{color_reset}"
         # Exception and errors
         if record.exc_info:
             if not record.exc_text:
@@ -57,12 +49,12 @@ class LogFormatter(logging.Formatter):
         if record.exc_text:
             if result[-1:] != '\n':
                 result += '\n'
-            result += f"{color}{record.exc_text}{color_reset}"
+            result += f"{color}{header}{record.exc_text}{color_reset}"
         # Stack
         if record.stack_info:
-            if result[-1:] != '\n':
-                result += '\n'
-            result += f"{color}{self.formatStack(record.stack_info)}{color_reset}"
+            stack_messages = self.formatStack(record.stack_info).split("\n")
+            for message in stack_messages:
+                result += f"\n{color}{header}{message}{color_reset}"
         return result
 
     def formatTime(self, record, datefmt = None) -> str:

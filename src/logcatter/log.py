@@ -9,6 +9,7 @@ import logging
 
 from logcatter.formatter import LogFormatter
 from logcatter.logcat import Logcat
+from logcatter.level import LEVEL_VERBOSE, LEVEL_DEBUG, LEVEL_INFO, LEVEL_WARNING, LEVEL_ERROR, LEVEL_FATAL
 
 
 class Log:
@@ -22,11 +23,12 @@ class Log:
     Logcat, including automatic tagging with the calling filename.
     """
 
-    DEBUG = logging.DEBUG
-    INFO = logging.INFO
-    WARNING = logging.WARNING
-    ERROR = logging.ERROR
-    CRITICAL = logging.CRITICAL
+    VERBOSE = LEVEL_VERBOSE
+    DEBUG = LEVEL_DEBUG
+    INFO = LEVEL_INFO
+    WARNING = LEVEL_WARNING
+    ERROR = LEVEL_ERROR
+    FATAL = LEVEL_FATAL
 
     @staticmethod
     def getLogger() -> logging.Logger:
@@ -63,49 +65,161 @@ class Log:
         Log.getLogger().setLevel(level)
 
     @staticmethod
-    def isVerbose():
+    def is_verbose():
         """
-        Checks the logging level is `Log.DEBUG`.
+        Checks the logging level is `Log.VERBOSE` or below.
         :return:
-            bool: `True` when the level is `Log.DEBUG`, `False` otherwise.
+            bool: `True` when the level is `Log.VERBOSE` or below, `False` otherwise.
         """
-        return Log.getLogger().level == Log.DEBUG
+        return Log.getLogger().level <= Log.VERBOSE
 
     @staticmethod
-    def d(msg: str, *args, **kwargs):
+    def is_quiet():
+        """
+        Checks the logging level is `Log.WARNING` or above.
+        :return:
+            bool: `True` when the level is `Log.WARNING` or above, `False` otherwise.
+        """
+        return Log.getLogger().level >= Log.WARNING
+
+    @staticmethod
+    def is_silent():
+        """
+        Checks the logging level is greater than `Log.FATAL`.
+        :return:
+            bool: `True` when the level is greater than `Log.FATAL`, `False` otherwise.
+        """
+        return Log.getLogger().level > Log.FATAL
+
+    @staticmethod
+    def _log(
+            level: int,
+            msg: str,
+            *args,
+            e: object | None = None,
+            s: bool = False,
+            **kwargs,
+    ):
+        """
+        Logs a message with the given level.
+
+        Args:
+            :param level: Level of the message.
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
+        """
+        messages = msg.split('\n')
+        for index, message in enumerate(messages):
+            Log.getLogger().log(
+                level,
+                message,
+                *args,
+                stacklevel=3,
+                exc_info=e if index == len(messages)-1 else None,
+                stack_info=s if index == len(messages)-1 else False,
+                **kwargs,
+            )
+
+    @staticmethod
+    def v(
+            msg: str,
+            *args,
+            e: object | None = None,
+            s: bool = False,
+            **kwargs,
+    ):
+        """
+        Logs a message with the VERBOSE level.
+
+        Args:
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
+        """
+        Log._log(
+            Log.VERBOSE,
+            msg,
+            *args,
+            e=e,
+            s=s,
+            **kwargs,
+        )
+
+    @staticmethod
+    def d(
+            msg: str,
+            *args,
+            e: object | None = None,
+            s: bool = False,
+            **kwargs,
+    ):
         """
         Logs a message with the DEBUG level.
 
         Args:
-            msg (str): The message to be logged.
-            *args: Arguments to be merged into `msg` using string formatting.
-            **kwargs: Other keyword arguments for the underlying logger.
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
         """
-        Log.getLogger().debug(msg, *args, stacklevel=2, **kwargs)
+        Log._log(
+            Log.DEBUG,
+            msg,
+            *args,
+            e=e,
+            s=s,
+            **kwargs,
+        )
 
     @staticmethod
-    def i(msg: str, *args, **kwargs):
+    def i(
+            msg: str,
+            *args,
+            e: object | None = None,
+            s: bool = False,
+            **kwargs,
+    ):
         """
         Logs a message with the INFO level.
 
         Args:
-            msg (str): The message to be logged.
-            *args: Arguments to be merged into `msg` using string formatting.
-            **kwargs: Other keyword arguments for the underlying logger.
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
         """
-        Log.getLogger().info(msg, *args, stacklevel=2, **kwargs)
+        Log._log(
+            Log.INFO,
+            msg,
+            *args,
+            e=e,
+            s=s,
+            **kwargs,
+        )
 
     @staticmethod
-    def w(msg: str, *args, **kwargs):
+    def w(
+            msg: str,
+            *args,
+            e: object | None = None,
+            s: bool = False,
+            **kwargs,
+    ):
         """
         Logs a message with the WARNING level.
 
         Args:
-            msg (str): The message to be logged.
-            *args: Arguments to be merged into `msg` using string formatting.
-            **kwargs: Other keyword arguments for the underlying logger.
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
         """
-        Log.getLogger().warning(msg, *args, stacklevel=2, **kwargs)
+        Log._log(
+            Log.WARNING,
+            msg,
+            *args,
+            e=e,
+            s=s,
+            **kwargs,
+        )
 
     @staticmethod
     def e(
@@ -118,24 +232,17 @@ class Log:
         """
         Logs a message with the ERROR level.
 
-        This method includes special parameters for logging exception and stack information.
-
         Args:
-            msg (str): The message to be logged.
-            *args: Arguments to be merged into `msg` using string formatting.
-            e (object | None, optional): Exception information to add to the log.
-                Can be an exception object or `True` to capture the current exception.
-                Defaults to None. Corresponds to the `exc_info` parameter.
-            s (bool, optional): If True, adds stack information to the log.
-                Defaults to False. Corresponds to the `stack_info` parameter.
-            **kwargs: Other keyword arguments for the underlying logger.
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
         """
-        Log.getLogger().error(
+        Log._log(
+            Log.ERROR,
             msg,
             *args,
-            stacklevel=2,
-            exc_info=e,
-            stack_info=s,
+            e=e,
+            s=s,
             **kwargs,
         )
 
@@ -150,23 +257,16 @@ class Log:
         """
         Logs a message with the CRITICAL level.
 
-        This method includes special parameters for logging exception and stack information.
-
         Args:
-            msg (str): The message to be logged.
-            *args: Arguments to be merged into `msg` using string formatting.
-            e (object | None, optional): Exception information to add to the log.
-                Can be an exception object or `True` to capture the current exception.
-                Defaults to None. Corresponds to the `exc_info` parameter.
-            s (bool, optional): If True, adds stack information to the log.
-                Defaults to False. Corresponds to the `stack_info` parameter.
-            **kwargs: Other keyword arguments for the underlying logger.
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
         """
-        Log.getLogger().critical(
+        Log._log(
+            Log.FATAL,
             msg,
             *args,
-            stacklevel=2,
-            exc_info=e,
-            stack_info=s,
+            e=e,
+            s=s,
             **kwargs,
         )
