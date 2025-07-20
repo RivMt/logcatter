@@ -180,25 +180,36 @@ class Log:
     @staticmethod
     @contextmanager
     def print_log(
-            *args,
             level: int = VERBOSE,
-            **kwargs,
+            show_stack: bool = False,
+            error_level: int = ERROR,
+            show_error_stack: bool = True,
     ):
         """
         Log `print` message with the given level in context
 
         Args:
             :param level: Level of the message.
+            :param error_level: Level of the error message.
+            :param show_stack: Whether show the stacktrace or not for the message.
+            :param show_error_stack: Whether show the stacktrace or not for the error.
         """
+        # Print
         original_stdout = sys.stdout
-        live_buffer = Log._PrintLogger(level, *args, **kwargs)
-        sys.stdout = live_buffer
+        buffer_out = Log._PrintLogger(level, s=show_stack)
+        sys.stdout = buffer_out
+        # Error
+        original_stderr = sys.stderr
+        buffer_err = Log._PrintLogger(error_level, s=show_error_stack)
+        sys.stderr = buffer_err
 
         try:
             yield
         finally:
-            live_buffer.flush()
+            buffer_out.flush()
+            buffer_err.flush()
             sys.stdout = original_stdout
+            sys.stderr = original_stderr
 
     @staticmethod
     def v(
