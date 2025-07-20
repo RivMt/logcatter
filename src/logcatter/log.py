@@ -183,6 +183,7 @@ class Log:
     def print_log(
             level: int = VERBOSE,
             show_stack: bool = False,
+            print_error: bool = False,
             error_level: int = ERROR,
             show_error_stack: bool = True,
     ):
@@ -192,6 +193,7 @@ class Log:
         Args:
             :param level: Level of the message.
             :param error_level: Level of the error message.
+            :param print_error: Whether print the error or not.
             :param show_stack: Whether show the stacktrace or not for the message.
             :param show_error_stack: Whether show the stacktrace or not for the error.
         """
@@ -200,17 +202,19 @@ class Log:
         buffer_out = Log._PrintLogger(level, s=show_stack)
         sys.stdout = buffer_out
         # Error
-        original_stderr = sys.stderr
-        buffer_err = Log._PrintLogger(error_level, s=show_error_stack)
-        sys.stderr = buffer_err
+        if print_error:
+            original_stderr = sys.stderr
+            buffer_err = Log._PrintLogger(error_level, s=show_error_stack)
+            sys.stderr = buffer_err
 
         try:
             yield
         finally:
             buffer_out.flush()
-            buffer_err.flush()
             sys.stdout = original_stdout
-            sys.stderr = original_stderr
+            if print_error:
+                buffer_err.flush()
+                sys.stderr = original_stderr
 
     @staticmethod
     def v(
