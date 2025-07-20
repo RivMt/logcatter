@@ -4,7 +4,6 @@ Provides a static, Android Logcat-style logging interface.
 This module offers a simple, zero-configuration facade over Python's standard
 logging module, designed to be instantly familiar to Android developers.
 """
-import io
 import sys
 import logging
 from contextlib import contextmanager
@@ -98,8 +97,10 @@ class Log:
             logging.Logger: The configured logger instance.
         """
         logger = logging.getLogger(Logcat.NAME)
+        # Init if not initiated
         if not logger.hasHandlers():
-            logger.setLevel(logging.DEBUG)
+            logging.addLevelName(Log.VERBOSE, "VERBOSE")
+            logger.setLevel(Log.VERBOSE)
             handler = logging.StreamHandler()
             handler.setFormatter(LogFormatter())
             logger.addHandler(handler)
