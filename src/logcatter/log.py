@@ -4,8 +4,10 @@ Provides a static, Android Logcat-style logging interface.
 This module offers a simple, zero-configuration facade over Python's standard
 logging module, designed to be instantly familiar to Android developers.
 """
-
+import io
+import sys
 import logging
+from contextlib import contextmanager
 
 from logcatter.formatter import LogFormatter
 from logcatter.logcat import Logcat
@@ -29,6 +31,59 @@ class Log:
     WARNING = LEVEL_WARNING
     ERROR = LEVEL_ERROR
     FATAL = LEVEL_FATAL
+
+    class _PrintLogger:
+        """
+        An internal file-like object that redirects writes to the Log utility.
+        It buffers text until a newline is received, then logs the complete line.
+        """
+
+        def __init__(
+                self,
+                level: int,
+                *args,
+                **kwargs,
+        ):
+            self.level = level
+            self.args = args
+            self.kwargs = kwargs
+            self._buffer = ""
+            self.stacklevel = 3
+
+        def write(self, text: str):
+            """
+            Receives text from a print call, buffers it, and logs complete lines.
+            """
+            if not text:
+                return
+
+            self._buffer += text
+            if '\n' in self._buffer:
+                lines = self._buffer.split('\n')
+                self._buffer = lines.pop()
+                for line in lines:
+                    if line:
+                        Log._log(
+                            self.level,
+                            line,
+                            *self.args,
+                            stacklevel=self.stacklevel,
+                            **self.kwargs,
+                        )
+
+        def flush(self):
+            """
+            Logs any remaining text in the buffer. Called when the context exits.
+            """
+            if self._buffer:
+                Log._log(
+                    self.level,
+                    self._buffer,
+                    *self.args,
+                    stacklevel=self.stacklevel,
+                    **self.kwargs,
+                )
+                self._buffer = ""
 
     @staticmethod
     def getLogger() -> logging.Logger:
@@ -96,6 +151,7 @@ class Log:
             level: int,
             msg: str,
             *args,
+            stacklevel: int = 3,
             e: object | None = None,
             s: bool = False,
             **kwargs,
@@ -115,11 +171,34 @@ class Log:
                 level,
                 message,
                 *args,
-                stacklevel=3,
+                stacklevel=stacklevel,
                 exc_info=e if index == len(messages)-1 else None,
                 stack_info=s if index == len(messages)-1 else False,
                 **kwargs,
             )
+
+    @staticmethod
+    @contextmanager
+    def print_log(
+            *args,
+            level: int = VERBOSE,
+            **kwargs,
+    ):
+        """
+        Log `print` message with the given level in context
+
+        Args:
+            :param level: Level of the message.
+        """
+        original_stdout = sys.stdout
+        live_buffer = Log._PrintLogger(level, *args, **kwargs)
+        sys.stdout = live_buffer
+
+        try:
+            yield
+        finally:
+            live_buffer.flush()
+            sys.stdout = original_stdout
 
     @staticmethod
     def v(
@@ -141,6 +220,7 @@ class Log:
             Log.VERBOSE,
             msg,
             *args,
+            stacklevel=3,
             e=e,
             s=s,
             **kwargs,
@@ -166,6 +246,7 @@ class Log:
             Log.DEBUG,
             msg,
             *args,
+            stacklevel=3,
             e=e,
             s=s,
             **kwargs,
@@ -191,6 +272,7 @@ class Log:
             Log.INFO,
             msg,
             *args,
+            stacklevel=3,
             e=e,
             s=s,
             **kwargs,
@@ -216,6 +298,7 @@ class Log:
             Log.WARNING,
             msg,
             *args,
+            stacklevel=3,
             e=e,
             s=s,
             **kwargs,
@@ -241,6 +324,7 @@ class Log:
             Log.ERROR,
             msg,
             *args,
+            stacklevel=3,
             e=e,
             s=s,
             **kwargs,
@@ -266,6 +350,7 @@ class Log:
             Log.FATAL,
             msg,
             *args,
+            stacklevel=3,
             e=e,
             s=s,
             **kwargs,
