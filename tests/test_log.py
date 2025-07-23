@@ -1,6 +1,7 @@
 from src.logcatter import Log
 
 Log.setLevel(Log.VERBOSE)
+Log.save("log.log")
 Log.d(f"Current verbose={Log.is_verbose()}")
 Log.d("This is DEBUG")
 Log.i("This is INFO")

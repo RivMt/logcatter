@@ -100,6 +100,7 @@ class Log:
         # Init if not initiated
         if not logger.hasHandlers():
             logging.addLevelName(Log.VERBOSE, "VERBOSE")
+            logging.addLevelName(Log.FATAL, "FATAL")
             logger.setLevel(Log.VERBOSE)
             handler = logging.StreamHandler()
             handler.setFormatter(LogFormatter())
@@ -119,6 +120,17 @@ class Log:
                 representation (e.g., "INFO").
         """
         Log.getLogger().setLevel(level)
+
+    @staticmethod
+    def save(filename: str, mode="w"):
+        """
+        Saves the log to a file.
+        :param filename: Path of the file to save to.
+        :param mode: Mode to open the file with. Default is 'w'.
+        """
+        handler = logging.FileHandler(filename, mode=mode)
+        handler.setFormatter(LogFormatter(ignore_color=True))
+        Log.getLogger().addHandler(handler)
 
     @staticmethod
     def is_verbose():

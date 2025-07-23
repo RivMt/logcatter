@@ -19,6 +19,12 @@ class LogFormatter(logging.Formatter):
     `YYYY-MM-DD HH:mm:ss SSS [L/tag] message`
     """
 
+    ignore_color: bool = False
+
+    def __init__(self, ignore_color: bool = False):
+        super().__init__()
+        self.ignore_color = ignore_color
+
     def format(self, record: logging.LogRecord) -> str:
         """
         Formats a log record into a colored, Logcat-style string.
@@ -37,8 +43,8 @@ class LogFormatter(logging.Formatter):
         level = record.levelname.upper()[0]
         tag = record.filename
         message = record.getMessage()
-        color = COLOR.get(record.levelno)
-        color_reset = COLOR_RESET
+        color = COLOR.get(record.levelno) if not self.ignore_color else ""
+        color_reset = COLOR_RESET if not self.ignore_color else ""
         header = f"{asctime} [{level}/{tag}] "
         # Base message
         result = f"{color}{header}{message}{color_reset}"
