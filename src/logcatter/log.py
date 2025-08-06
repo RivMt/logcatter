@@ -5,17 +5,34 @@ This module offers a simple, zero-configuration facade over Python's standard
 logging module, designed to be instantly familiar to Android developers.
 """
 import sys
+import multiprocessing
+from typing import Union
 import logging
+from logging.handlers import QueueHandler
 from contextlib import contextmanager
 
 from logcatter.formatter import LogFormatter
 from logcatter.logcat import Logcat
 from logcatter.level import LEVEL_VERBOSE, LEVEL_DEBUG, LEVEL_INFO, LEVEL_WARNING, LEVEL_ERROR, LEVEL_FATAL
+from logcatter.command import COMMAND_SET_LEVEL
 
 
 class Log:
     """
     A static utility class that provides an Android Logcat-like logging interface.
+
+    **IMPORTANT**
+
+    Use `Log.init()` very first of your code, to initialize the logging system. And
+    use `Log.dispose()` very last of your code, to gracefully dispose this.
+
+    If you want to use multiprocessing, use `Log.pool_init` as an initializer.
+
+    .. code-block:: python
+
+        Log.init()
+        with multiprocessing.Pool(processes=2, initializer=Log.pool_init) as pool:
+            # Your code
 
     This class is not meant to be instantiated. It offers a set of static methods
     (e.g., `d`, `i`, `w`, `e`) that wrap the standard Python `logging` module
@@ -30,6 +47,113 @@ class Log:
     WARNING = LEVEL_WARNING
     ERROR = LEVEL_ERROR
     FATAL = LEVEL_FATAL
+
+    _log_queue: Union['multiprocessing.Queue', None] = None
+    _listener_process: Union['multiprocessing.Process', None] = None
+
+    @staticmethod
+    def _listener_configurer(level: int | str):
+        """
+        [Internal] Configures the logger for the listener process.
+        This version is self-contained and does not depend on other Log methods.
+        """
+        logger = logging.getLogger(Logcat.NAME)
+        if logger.hasHandlers():
+            logger.handlers.clear()
+        handler = logging.StreamHandler()
+        handler.setFormatter(LogFormatter())
+        logger.addHandler(handler)
+        logger.setLevel(level)
+
+    @staticmethod
+    def _listener_process_target(queue: multiprocessing.Queue, level: int | str):
+        """
+        [Internal] The target function for the listener process.
+        It waits for log records on the queue and processes them.
+        """
+        Log._listener_configurer(level)
+        logger = logging.getLogger(Logcat.NAME)
+        while True:
+            try:
+                item = queue.get()
+                if item is None:
+                    break
+                if isinstance(item, tuple):
+                    command, value = item
+                    if command == COMMAND_SET_LEVEL:
+                        logger.setLevel(value)
+                    continue
+                if logger.isEnabledFor(item.levelno):
+                    logger.handle(item)
+            except Exception:
+                import sys, traceback
+                print('[logcatter] Error in logging listener process:', file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+
+    @staticmethod
+    def _worker_configurer():
+        """
+        [Internal] Configures logging for a worker process.
+        It removes all existing handlers and adds a QueueHandler.
+        This now reads the queue from the class's static variable.
+        """
+        if Log._log_queue is None:
+            return
+        logger = logging.getLogger(Logcat.NAME)
+        if logger.hasHandlers():
+            logger.handlers.clear()
+
+        qh = QueueHandler(Log._log_queue)
+        logger.addHandler(qh)
+        logger.setLevel(Log.VERBOSE)
+
+    @staticmethod
+    def enable_multiprocessing(level: int | str = VERBOSE):
+        """
+        Initializes the logging system for a multiprocessing environment.
+        This must be called once from the main process.
+
+        It starts a dedicated listener process that handles all log records
+        sent from other processes.
+
+        Args:
+            level: The global logging level for the entire application.
+        """
+        if Log._listener_process is not None:
+            return
+
+        Log._log_queue = multiprocessing.Queue(-1)
+        Log._listener_process = multiprocessing.Process(
+            target=Log._listener_process_target,
+            args=(Log._log_queue, level)
+        )
+        Log._listener_process.daemon = True
+        Log._listener_process.start()
+        Log._worker_configurer()
+
+    @staticmethod
+    def pool_init():
+        """
+        A helper to be used as the initializer for `multiprocessing.Pool`.
+        Example: multiprocessing.Pool(initializer=Log.pool_init)
+        """
+        Log._worker_configurer()
+
+    @staticmethod
+    def disable_multiprocessing():
+        """
+        Shuts down the logging listener process gracefully.
+        This should be called at the end of the main script to ensure
+        all logs are flushed.
+        """
+        if Log._listener_process is None:
+            return
+        if Log._log_queue:
+            Log._log_queue.put(None)
+        if Log._listener_process:
+            Log._listener_process.join()
+        Log._listener_process = None
+        Log._log_queue = None
 
     class _PrintLogger:
         """
@@ -85,6 +209,16 @@ class Log:
                 self._buffer = ""
 
     @staticmethod
+    def init():
+        logging.addLevelName(Log.VERBOSE, "VERBOSE")
+        logging.addLevelName(Log.FATAL, "FATAL")
+        Log.enable_multiprocessing()
+
+    @staticmethod
+    def dispose():
+        Log.disable_multiprocessing()
+
+    @staticmethod
     def getLogger() -> logging.Logger:
         """
         Retrieves the singleton logger instance for the application.
@@ -97,11 +231,8 @@ class Log:
             logging.Logger: The configured logger instance.
         """
         logger = logging.getLogger(Logcat.NAME)
-        # Init if not initiated
+        # Register stream handler
         if not logger.hasHandlers():
-            logging.addLevelName(Log.VERBOSE, "VERBOSE")
-            logging.addLevelName(Log.FATAL, "FATAL")
-            logger.setLevel(Log.VERBOSE)
             handler = logging.StreamHandler()
             handler.setFormatter(LogFormatter())
             logger.addHandler(handler)
@@ -119,7 +250,11 @@ class Log:
                 Can be an integer constant (e.g., `logging.INFO`) or its string
                 representation (e.g., "INFO").
         """
-        Log.getLogger().setLevel(level)
+        if Log._log_queue:
+            command = (COMMAND_SET_LEVEL, level)
+            Log._log_queue.put(command)
+        else:
+            Log.getLogger().setLevel(level)
 
     @staticmethod
     def save(filename: str, mode="w"):
@@ -192,39 +327,39 @@ class Log:
 
     @staticmethod
     @contextmanager
-    def print_log(
-            level: int = VERBOSE,
-            show_stack: bool = False,
-            print_error: bool = False,
-            error_level: int = ERROR,
-            show_error_stack: bool = True,
+    def redirect(
+            stdout: int | None = VERBOSE,
+            stderr: int | None = None,
+            show_stdout_stack: bool = False,
+            show_stderr_stack: bool = False,
     ):
         """
         Log `print` message with the given level in context
 
         Args:
-            :param level: Level of the message.
-            :param error_level: Level of the error message.
-            :param print_error: Whether print the error or not.
-            :param show_stack: Whether show the stacktrace or not for the message.
-            :param show_error_stack: Whether show the stacktrace or not for the error.
+            :param stdout: Level of the message.
+            :param stderr: Level of the error message.
+            :param show_stdout_stack: Whether show the stacktrace or not for the message.
+            :param show_stderr_stack: Whether show the stacktrace or not for the error.
         """
         # Print
-        original_stdout = sys.stdout
-        buffer_out = Log._PrintLogger(level, s=show_stack)
-        sys.stdout = buffer_out
+        if stdout:
+            original_stdout = sys.stdout
+            buffer_out = Log._PrintLogger(stdout, s=show_stdout_stack)
+            sys.stdout = buffer_out
         # Error
-        if print_error:
+        if stderr:
             original_stderr = sys.stderr
-            buffer_err = Log._PrintLogger(error_level, s=show_error_stack)
+            buffer_err = Log._PrintLogger(stderr, s=show_stderr_stack)
             sys.stderr = buffer_err
 
         try:
             yield
         finally:
-            buffer_out.flush()
-            sys.stdout = original_stdout
-            if print_error:
+            if stdout:
+                buffer_out.flush()
+                sys.stdout = original_stdout
+            if stderr:
                 buffer_err.flush()
                 sys.stderr = original_stderr
 

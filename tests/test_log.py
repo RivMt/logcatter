@@ -1,5 +1,6 @@
 from src.logcatter import Log
 
+Log.init()
 Log.setLevel(Log.VERBOSE)
 Log.save("log.log")
 Log.d(f"Current verbose={Log.is_verbose()}")
@@ -14,3 +15,4 @@ Log.f("This is CRITICAL with Exception", e=ValueError())
 Log.f("This is CRITICAL with Exception, Stacktrace", e=ValueError(), s=True)
 Log.setLevel(Log.ERROR)
 Log.e(f"Current verbose={Log.is_verbose()}")
+Log.dispose()
