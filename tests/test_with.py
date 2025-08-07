@@ -4,7 +4,7 @@ from time import sleep
 from src.logcatter import Log
 
 Log.init()
-Log.setLevel(Log.VERBOSE)
+Log.set_level(Log.VERBOSE)
 with Log.redirect(stderr=Log.ERROR):
     print("This is just print")
     print("Wait for 2 secs")

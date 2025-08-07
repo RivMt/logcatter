@@ -22,16 +22,65 @@ pip install logcatter
 
 ## 🚀 Quick Start
 
-Just import the `Log` class into your project and start logging.
+Just import the `Log` class into your project and call `Log.init()` first and `Log.dispose()` last of your code.
 
 ```python
 from logcatter import Log
 
+Log.init()
+
 Log.d("This is log!!")
-Log.setLevel(Log.WARNING)  # Hide DEBUG, INFO level logs
+Log.set_level(Log.WARNING)  # Hide DEBUG, INFO level logs
 Log.i("This is info!!")  # You cannot see this because you set the minimum level `WARNING`
 Log.e("ERROR!!!", e=ValueError())  # You can log the caught exception/error with argument `e`
 Log.f("FATAL ERROR", s=True)  # You can log the stacktrace with flag `s`
+
+Log.dispose()
+```
+
+### Using with other's code
+
+Some library or codes are using `print()` or `sys.stderr.write`. And the format of `Log` is not applied basically. In this case, you can use `Log.redirect` as a context manager.
+
+```python
+from logcatter import Log
+Log.init()
+
+with Log.redirect():
+    print("Some message")
+
+Log.dispose()
+```
+
+If internal print codes use CR (carriage return) to rewrite last line such as [tqdm](https://github.com/tqdm/tqdm), the `Log` style will not be applied.
+
+### Save logs
+
+You can save the log messages using just a single line.
+
+```python
+from logcatter import Log
+Log.init()
+
+Log.save("path of file")
+
+Log.dispose()
+```
+
+### Multiprocessing
+
+You can use `Log` in the multiprocessing with calling `Log.init_worker()`. (Don't forget the brackets!)
+
+```python
+from logcatter import Log
+import multiprocessing
+
+Log.init()
+
+with multiprocessing.Pool(processes=2, initializer=Log.init_worker()) as pool:
+    Log.i("Some message")
+
+Log.dispose()
 ```
 
 ### 💻 Output Example

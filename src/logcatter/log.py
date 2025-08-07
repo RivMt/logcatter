@@ -6,6 +6,7 @@ logging module, designed to be instantly familiar to Android developers.
 """
 import sys
 import multiprocessing
+import functools
 from typing import Union
 import logging
 from logging.handlers import QueueHandler
@@ -108,7 +109,7 @@ class Log:
         logger.setLevel(Log.VERBOSE)
 
     @staticmethod
-    def enable_multiprocessing(level: int | str = VERBOSE):
+    def _enable_multiprocessing(level: int | str = VERBOSE):
         """
         Initializes the logging system for a multiprocessing environment.
         This must be called once from the main process.
@@ -132,15 +133,17 @@ class Log:
         Log._worker_configurer()
 
     @staticmethod
-    def pool_init():
+    def _init_pool(queue: Union['multiprocessing.Queue', None] = None):
         """
         A helper to be used as the initializer for `multiprocessing.Pool`.
         Example: multiprocessing.Pool(initializer=Log.pool_init)
         """
+        if queue is not None:
+            Log._log_queue = queue
         Log._worker_configurer()
 
     @staticmethod
-    def disable_multiprocessing():
+    def _disable_multiprocessing():
         """
         Shuts down the logging listener process gracefully.
         This should be called at the end of the main script to ensure
@@ -154,6 +157,121 @@ class Log:
             Log._listener_process.join()
         Log._listener_process = None
         Log._log_queue = None
+
+    @staticmethod
+    def init():
+        logging.addLevelName(Log.VERBOSE, "VERBOSE")
+        logging.addLevelName(Log.FATAL, "FATAL")
+        Log._enable_multiprocessing()
+
+    @staticmethod
+    def dispose():
+        Log._disable_multiprocessing()
+
+    @staticmethod
+    def init_worker() -> callable:
+        """
+        Returns a pre-configured worker_init_fn for PyTorch DataLoader.
+
+        This handles the complexity of passing the log queue to worker processes,
+        encapsulating the functools.partial call.
+
+        Returns:
+            A callable function suitable for the `worker_init_fn` argument.
+
+        Raises:
+            RuntimeError: If `Log.init()` has not been called first.
+        """
+        log_queue = Log.get_queue()
+        if log_queue is None:
+            raise RuntimeError(
+                "Log.init() must be called before get_worker_init_fn()."
+            )
+        return functools.partial(Log._init_pool, queue=log_queue)
+
+    @staticmethod
+    def get_queue() -> Union['multiprocessing.Queue', None]:
+        """
+        Returns the internal log queue.
+        Useful for passing the queue to other modules or initializers.
+        """
+        return Log._log_queue
+
+    @staticmethod
+    def get_logger() -> logging.Logger:
+        """
+        Retrieves the singleton logger instance for the application.
+
+        On the first call, it initializes the logger with a `StreamHandler` and
+        the custom `LogFormatter`. Subsequent calls return the same logger instance
+        without adding more handlers, preventing duplicate log messages.
+
+        Returns:
+            logging.Logger: The configured logger instance.
+        """
+        logger = logging.getLogger(Logcat.NAME)
+        # Register stream handler
+        if not logger.hasHandlers():
+            handler = logging.StreamHandler()
+            handler.setFormatter(LogFormatter())
+            logger.addHandler(handler)
+        return logger
+
+    @staticmethod
+    def set_level(level: int | str):
+        """
+        Sets the logging level for the application's logger.
+
+        Messages with a severity lower than `level` will be ignored.
+
+        Args:
+            level (int | str): The minimum level of severity to log.
+                Can be an integer constant (e.g., `logging.INFO`) or its string
+                representation (e.g., "INFO").
+        """
+        if Log._log_queue:
+            command = (COMMAND_SET_LEVEL, level)
+            Log._log_queue.put(command)
+        else:
+            Log.get_logger().setLevel(level)
+
+    @staticmethod
+    def save(filename: str, mode="w"):
+        """
+        Saves the log to a file.
+        :param filename: Path of the file to save to.
+        :param mode: Mode to open the file with. Default is 'w'.
+        """
+        handler = logging.FileHandler(filename, mode=mode)
+        handler.setFormatter(LogFormatter(ignore_color=True))
+        Log.get_logger().addHandler(handler)
+
+    @staticmethod
+    def is_verbose():
+        """
+        Checks the logging level is `Log.VERBOSE` or below.
+        :return:
+            bool: `True` when the level is `Log.VERBOSE` or below, `False` otherwise.
+        """
+        return Log.get_logger().level <= Log.VERBOSE
+
+    @staticmethod
+    def is_quiet():
+        """
+        Checks the logging level is `Log.WARNING` or above.
+        :return:
+            bool: `True` when the level is `Log.WARNING` or above, `False` otherwise.
+        """
+        return Log.get_logger().level >= Log.WARNING
+
+    @staticmethod
+    def is_silent():
+        """
+        Checks the logging level is greater than `Log.FATAL`.
+        :return:
+            bool: `True` when the level is greater than `Log.FATAL`, `False` otherwise.
+        """
+        return Log.get_logger().level > Log.FATAL
 
     class _PrintLogger:
         """
@@ -209,123 +327,6 @@ class Log:
                 self._buffer = ""
 
     @staticmethod
-    def init():
-        logging.addLevelName(Log.VERBOSE, "VERBOSE")
-        logging.addLevelName(Log.FATAL, "FATAL")
-        Log.enable_multiprocessing()
-
-    @staticmethod
-    def dispose():
-        Log.disable_multiprocessing()
-
-    @staticmethod
-    def getLogger() -> logging.Logger:
-        """
-        Retrieves the singleton logger instance for the application.
-
-        On the first call, it initializes the logger with a `StreamHandler` and
-        the custom `LogFormatter`. Subsequent calls return the same logger instance
-        without adding more handlers, preventing duplicate log messages.
-
-        Returns:
-            logging.Logger: The configured logger instance.
-        """
-        logger = logging.getLogger(Logcat.NAME)
-        # Register stream handler
-        if not logger.hasHandlers():
-            handler = logging.StreamHandler()
-            handler.setFormatter(LogFormatter())
-            logger.addHandler(handler)
-        return logger
-
-    @staticmethod
-    def setLevel(level: int | str):
-        """
-        Sets the logging level for the application's logger.
-
-        Messages with a severity lower than `level` will be ignored.
-
-        Args:
-            level (int | str): The minimum level of severity to log.
-                Can be an integer constant (e.g., `logging.INFO`) or its string
-                representation (e.g., "INFO").
-        """
-        if Log._log_queue:
-            command = (COMMAND_SET_LEVEL, level)
-            Log._log_queue.put(command)
-        else:
-            Log.getLogger().setLevel(level)
-
-    @staticmethod
-    def save(filename: str, mode="w"):
-        """
-        Saves the log to a file.
-        :param filename: Path of the file to save to.
-        :param mode: Mode to open the file with. Default is 'w'.
-        """
-        handler = logging.FileHandler(filename, mode=mode)
-        handler.setFormatter(LogFormatter(ignore_color=True))
-        Log.getLogger().addHandler(handler)
-
-    @staticmethod
-    def is_verbose():
-        """
-        Checks the logging level is `Log.VERBOSE` or below.
-        :return:
-            bool: `True` when the level is `Log.VERBOSE` or below, `False` otherwise.
-        """
-        return Log.getLogger().level <= Log.VERBOSE
-
-    @staticmethod
-    def is_quiet():
-        """
-        Checks the logging level is `Log.WARNING` or above.
-        :return:
-            bool: `True` when the level is `Log.WARNING` or above, `False` otherwise.
-        """
-        return Log.getLogger().level >= Log.WARNING
-
-    @staticmethod
-    def is_silent():
-        """
-        Checks the logging level is greater than `Log.FATAL`.
-        :return:
-            bool: `True` when the level is greater than `Log.FATAL`, `False` otherwise.
-        """
-        return Log.getLogger().level > Log.FATAL
-
-    @staticmethod
-    def _log(
-            level: int,
-            msg: str,
-            *args,
-            stacklevel: int = 3,
-            e: object | None = None,
-            s: bool = False,
-            **kwargs,
-    ):
-        """
-        Logs a message with the given level.
-
-        Args:
-            :param level: Level of the message.
-            :param msg: The message to be logged.
-            :param e: Exception object to logged together.
-            :param s: Whether stacktrace or not
-        """
-        messages = msg.split('\n')
-        for index, message in enumerate(messages):
-            Log.getLogger().log(
-                level,
-                message,
-                *args,
-                stacklevel=stacklevel,
-                exc_info=e if index == len(messages)-1 else None,
-                stack_info=s if index == len(messages)-1 else False,
-                **kwargs,
-            )
-
-    @staticmethod
     @contextmanager
     def redirect(
             stdout: int | None = VERBOSE,
@@ -362,6 +363,37 @@ class Log:
             if stderr:
                 buffer_err.flush()
                 sys.stderr = original_stderr
+
+    @staticmethod
+    def _log(
+            level: int,
+            msg: str,
+            *args,
+            stacklevel: int = 3,
+            e: object | None = None,
+            s: bool = False,
+            **kwargs,
+    ):
+        """
+        Logs a message with the given level.
+
+        Args:
+            :param level: Level of the message.
+            :param msg: The message to be logged.
+            :param e: Exception object to logged together.
+            :param s: Whether stacktrace or not
+        """
+        messages = msg.split('\n')
+        for index, message in enumerate(messages):
+            Log.get_logger().log(
+                level,
+                message,
+                *args,
+                stacklevel=stacklevel,
+                exc_info=e if index == len(messages)-1 else None,
+                stack_info=s if index == len(messages)-1 else False,
+                **kwargs,
+            )
 
     @staticmethod
     def v(

@@ -18,12 +18,12 @@ if __name__ == '__main__':
     Log.init()
     Log.i("Main process starting...")
     try:
-        with multiprocessing.Pool(processes=2, initializer=Log.pool_init) as pool:
+        with multiprocessing.Pool(processes=2, initializer=Log.init_worker()) as pool:
             pool.map_async(dynamic_worker_task, range(2))
             time.sleep(1)
             Log.i("\n" + "=" * 50)
             Log.w(">>> CHANGING LOG LEVEL TO DEBUG <<<")
-            Log.setLevel(Log.DEBUG)
+            Log.set_level(Log.INFO)
             Log.v("This log must be ignored\n")
             time.sleep(1)
             pool.map_async(dynamic_worker_task, range(2, 4))
