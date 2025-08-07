@@ -133,7 +133,7 @@ class Log:
         Log._worker_configurer()
 
     @staticmethod
-    def _init_pool(queue: Union['multiprocessing.Queue', None] = None):
+    def _init_pool(queue: Union['multiprocessing.Queue', None] = None, worker_id: int = 0):
         """
         A helper to be used as the initializer for `multiprocessing.Pool`.
         Example: multiprocessing.Pool(initializer=Log.pool_init)
