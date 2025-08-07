@@ -159,7 +159,7 @@ class Log:
         Log._disable_multiprocessing()
 
     @staticmethod
-    def init_pool(queue: Union['multiprocessing.Queue', None] = None, worker_id: int = 0):
+    def init_pool(worker_id: int = 0, queue: Union['multiprocessing.Queue', None] = None):
         """
         A helper to be used as the initializer for `multiprocessing.Pool`.
         Example: multiprocessing.Pool(initializer=Log.pool_init)
