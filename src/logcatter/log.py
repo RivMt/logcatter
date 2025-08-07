@@ -133,16 +133,6 @@ class Log:
         Log._worker_configurer()
 
     @staticmethod
-    def _init_pool(queue: Union['multiprocessing.Queue', None] = None, worker_id: int = 0):
-        """
-        A helper to be used as the initializer for `multiprocessing.Pool`.
-        Example: multiprocessing.Pool(initializer=Log.pool_init)
-        """
-        if queue is not None:
-            Log._log_queue = queue
-        Log._worker_configurer()
-
-    @staticmethod
     def _disable_multiprocessing():
         """
         Shuts down the logging listener process gracefully.
@@ -169,6 +159,16 @@ class Log:
         Log._disable_multiprocessing()
 
     @staticmethod
+    def init_pool(queue: Union['multiprocessing.Queue', None] = None, worker_id: int = 0):
+        """
+        A helper to be used as the initializer for `multiprocessing.Pool`.
+        Example: multiprocessing.Pool(initializer=Log.pool_init)
+        """
+        if queue is not None:
+            Log._log_queue = queue
+        Log._worker_configurer()
+
+    @staticmethod
     def init_worker() -> callable:
         """
         Returns a pre-configured worker_init_fn for PyTorch DataLoader.
@@ -187,7 +187,7 @@ class Log:
             raise RuntimeError(
                 "Log.init() must be called before get_worker_init_fn()."
             )
-        return functools.partial(Log._init_pool, queue=log_queue)
+        return functools.partial(Log.init_pool, queue=log_queue)
 
     @staticmethod
     def get_queue() -> Union['multiprocessing.Queue', None]:
