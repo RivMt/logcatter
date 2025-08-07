@@ -40,17 +40,32 @@ Log.dispose()
 
 ### Using with other's code
 
-Some library or codes are using `print()` or `sys.stderr.write`. And the format of `Log` is not applied basically. In this case, you can use `Log.redirect` as a context manager.
+Some library or codes are using `print()`. And the format of `Log` is not applied basically to this. In this case, you can use `Log.redirect` as a context manager.
 
 ```python
+import sys
 from logcatter import Log
 Log.init()
 
-with Log.redirect():
+with Log.redirect(
+    stdout=Log.VERBOSE,
+    stderr=None,
+):
     print("Some message")
+    sys.stderr.write("stderr message\n")
 
 Log.dispose()
 ```
+
+Output:
+```txt
+1970-01-01 00:00:00 000 [V/<stdin>] Some message
+stderr message
+```
+
+`stdout` outputs (include `print`) will be handled a VERBOSE level. You can change this by parameter `stdout`. If the value is `None`, `Log.redirect` does not redirect `stdout`.
+
+Same as `stdout`, you can redirect `stderr` outputs by parameter `stderr`. But the default value is `None`.
 
 If internal print codes use CR (carriage return) to rewrite last line such as [tqdm](https://github.com/tqdm/tqdm), the `Log` style will not be applied.
 
@@ -62,9 +77,17 @@ You can save the log messages using just a single line.
 from logcatter import Log
 Log.init()
 
+Log.i("This will not be saved")
 Log.save("path of file")
+Log.i("Message saved")
 
 Log.dispose()
+```
+
+Saved log file:
+
+```txt
+Message saved
 ```
 
 ### Multiprocessing
@@ -83,7 +106,7 @@ with multiprocessing.Pool(processes=2, initializer=Log.init_worker()) as pool:
 Log.dispose()
 ```
 
-### 💻 Output Example
+## 💻 Output Example
 
 **Visual Studio Code**
 
